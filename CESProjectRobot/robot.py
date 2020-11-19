@@ -9,8 +9,7 @@ import imutils
 import time
 import cv2
 
-front_wheels = Robot(left=(7, 8), right=(9, 10))
-back_wheels = Robot(left=(11, 12), right=(13, 14))
+wheels = Robot(left=(7, 8), right=(9, 10))
 camera = picamera.PiCamera()
 
 
@@ -73,8 +72,8 @@ def main():
     vs = VideoStream(usePiCamera=True).start()
     time.sleep(2.0)
     fps = FPS().start()
-   # image_detection_setup()
-   # deal_with_detections((scan_image_for_objects(image_detection_setup()[5])))
+    #   image_detection_setup()
+    #   deal_with_detections((scan_image_for_objects(image_detection_setup()[5])))
     movement_test_square()
     movement_test_circle()
     cv2.destroyAllWindows()
@@ -83,27 +82,20 @@ def main():
 
 
 def movement_test_square():
-    front_wheels.forward(2)
-    back_wheels.forward(2)
+    wheels.forward(2)
     sleep(2)
-    front_wheels.stop()
-    back_wheels.stop()
+    wheels.stop()
     for i in range(0, 2):
-        front_wheels.right(2)
-        back_wheels.right(2)
+        wheels.right(2)
         sleep(2)
-        front_wheels.stop()
-        back_wheels.stop()
+        wheels.stop()
     return
 
 
 def movement_test_circle():
-    front_wheels.forward(2)
-    back_wheels.forward(2)
+    wheels.forward(2)
     sleep(2)
-    front_wheels.right(2)
-    back_wheels.forward(2)
+    wheels.right(2)
     sleep(6)
-    front_wheels.stop()
-    back_wheels.stop()
+    wheels.stop()
     return
