@@ -1,21 +1,14 @@
-from gpiozero import Robot
-import picamera
-from time import sleep
-from imutils.video import VideoStream
-from imutils.video import FPS
-import numpy as np
 import argparse
-import imutils
 import time
 import cv2
+import imutils
+import numpy as np
+import picamera
+from gpiozero import Robot
+from imutils.video import VideoStream
 
 wheels = Robot(left=(7, 8), right=(9, 10))
 camera = picamera.PiCamera()
-
-
-def decide_next_movement(stream):
-    return
-
 
 def image_detection_setup():
     ap = argparse.ArgumentParser()
@@ -35,7 +28,7 @@ def image_detection_setup():
     return CLASSES, COLORS, net, args
 
 
-def scan_image_for_objects(vs, net, CLASSES, COLORS, args):
+def scan_image_for_objects(vs, net, CLASSES, COLORS, args, status):
     # loop over the frames from the video stream
     while True:
         frame = vs.read()
@@ -45,6 +38,7 @@ def scan_image_for_objects(vs, net, CLASSES, COLORS, args):
                                      0.007843, (300, 300), 127.5)
         net.setInput(blob)
         detections = net.forward()
+        coords = []
         # loop over the detections
         for i in np.arange(0, detections.shape[2]):
             confidence = detections[0, 0, i, 2]
@@ -56,46 +50,70 @@ def scan_image_for_objects(vs, net, CLASSES, COLORS, args):
                 (startX, startY, endX, endY) = box.astype("int")
                 label = "{}: {:.2f}%".format(CLASSES[idx],
                                              confidence * 100)
-                cv2.rectangle(frame, (startX, startY), (endX, endY),
+                coords[i] = cv2.rectangle(frame, (startX, startY), (endX, endY),
                               COLORS[idx], 2)
                 y = startY - 15 if startY - 15 > 15 else startY + 15
                 cv2.putText(frame, label, (startX, y),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLORS[idx], 2)
-    return vs, net, CLASSES, COLORS, args, detections
+        sorted_detections = []
+        for i in (0, len(detections)):
+            sorted_detections[i] = [detections[i], coords[i]]
+         return sorted_detections, status
 
 
-def deal_with_detections(param):
-    pass
+def decide_and_perform_next_movement(detections, stationary, non_detection_count):
+    closest_object = detections[0]
+    co_difference = 0
+    for i in (0, len(detections)):
+        current_co_difference = detections[i, 1].endX - detections[i, 1].startX
+        if current_co_difference > co_difference:
+            co_difference = current_co_difference
+            closest_object = detections[i]
+    if len(detections) == 0:
+        if stationary:
+            non_detection_count += 1
+            if non_detection_count >= 10:
+                status = 0
+                wheels.stop()
+        elif not stationary:
+            non_detection_count += 1
+            wheels.forward(0.8)
+    elif stationary:
+        non_detection_count += 1
+        wheels.forward(0.8)
+        stationary = False
+    elif closest_object[1].startX < 100 & co_difference > 120:
+        non_detection_count = 0
+        wheels.right(0.8)
+    elif closest_object[1].startX < 100 & co_difference < 120:
+        non_detection_count = 0
+        wheels.forward(0.8)
+    elif closest_object[1].startX >= 100 & closest_object[1].startX <= 200 & co_difference > 120:
+        non_detection_count = 0
+        wheels.backward(0.8)
+    elif closest_object[1].startX >= 100 & closest_object[1].startX <= 200 & co_difference < 120:
+        non_detection_count = 0
+        wheels.forward(0.8)
+    elif closest_object[1].startX > 200 & co_difference > 120:
+        non_detection_count = 0
+        wheels.left(0.8)
+    elif closest_object[1].startX < 200 & co_difference < 120:
+        non_detection_count = 0
+        wheels.forward(0.8)
+    return stationary, non_detection_count, status
 
 
 def main():
+    status = 1
+    stationary = True
+    non_detection_count = 0
     vs = VideoStream(usePiCamera=True).start()
-    time.sleep(2.0)
-    fps = FPS().start()
-    #   image_detection_setup()
-    #   deal_with_detections((scan_image_for_objects(image_detection_setup()[5])))
-    movement_test_square()
-    movement_test_circle()
+    CLASSES, COLORS, net, args = image_detection_setup()
+    time.sleep(5.0)
+    while status == 1:
+        detections = scan_image_for_objects(vs, net, CLASSES, COLORS, args, status)
+        decide_and_perform_next_movement(detections, stationary, non_detection_count, status)
     cv2.destroyAllWindows()
     vs.stop()
     return
 
-
-def movement_test_square():
-    wheels.forward(2)
-    sleep(2)
-    wheels.stop()
-    for i in range(0, 2):
-        wheels.right(2)
-        sleep(2)
-        wheels.stop()
-    return
-
-
-def movement_test_circle():
-    wheels.forward(2)
-    sleep(2)
-    wheels.right(2)
-    sleep(6)
-    wheels.stop()
-    return
