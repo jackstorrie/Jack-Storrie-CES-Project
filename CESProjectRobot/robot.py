@@ -1,14 +1,20 @@
+# imports
 import argparse
 import time
 import cv2
 import imutils
 import numpy as np
 import picamera
-from gpiozero import Robot
+import gpiozero
+
+
+# globals
 from imutils.video import VideoStream
 
-wheels = Robot(left=(7, 8), right=(9, 10))
+wheels = gpiozero.Robot(left=(7, 8), right=(9, 10))
 camera = picamera.PiCamera()
+us_sensor = gpiozero.input_devices.DistanceSensor(24, 18)
+
 
 def image_detection_setup():
     ap = argparse.ArgumentParser()
@@ -51,24 +57,36 @@ def scan_image_for_objects(vs, net, CLASSES, COLORS, args, status):
                 label = "{}: {:.2f}%".format(CLASSES[idx],
                                              confidence * 100)
                 coords[i] = cv2.rectangle(frame, (startX, startY), (endX, endY),
-                              COLORS[idx], 2)
+                                          COLORS[idx], 2)
                 y = startY - 15 if startY - 15 > 15 else startY + 15
                 cv2.putText(frame, label, (startX, y),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLORS[idx], 2)
         sorted_detections = []
         for i in (0, len(detections)):
             sorted_detections[i] = [detections[i], coords[i]]
-         return sorted_detections, status
+        return sorted_detections, status
 
 
 def decide_and_perform_next_movement(detections, stationary, non_detection_count):
     closest_object = detections[0]
     co_difference = 0
+    # determining closest object in frame
     for i in (0, len(detections)):
         current_co_difference = detections[i, 1].endX - detections[i, 1].startX
         if current_co_difference > co_difference:
             co_difference = current_co_difference
             closest_object = detections[i]
+    # performing ultrasonic sensor pulse
+    gpiozero.output(us_sensor[1], True)
+    time.sleep(0.00001)
+    gpiozero.output(us_sensor[1], False)
+    while gpiozero.input(us_sensor[0]) == 0:
+        pulse_start = time.time()
+    while gpiozero.input(us_sensor[0]) == 1:
+        pulse_end = time.time()
+    pulse_duration = pulse_end - pulse_start
+    distance = round((pulse_duration * 17150), 2)
+    # else-if construct to determine the next move of the robot
     if len(detections) == 0:
         if stationary:
             non_detection_count += 1
@@ -83,20 +101,36 @@ def decide_and_perform_next_movement(detections, stationary, non_detection_count
         wheels.forward(0.8)
         stationary = False
     elif closest_object[1].startX < 100 & co_difference > 120:
-        non_detection_count = 0
-        wheels.right(0.8)
+        if distance >= 100:
+            non_detection_count = 0
+            wheels.right(0.8)
+        else:
+            non_detection_count = 0
+            wheels.forward(0.8)
     elif closest_object[1].startX < 100 & co_difference < 120:
         non_detection_count = 0
         wheels.forward(0.8)
     elif closest_object[1].startX >= 100 & closest_object[1].startX <= 200 & co_difference > 120:
-        non_detection_count = 0
-        wheels.backward(0.8)
+        if distance >= 100:
+            non_detection_count = 0
+            wheels.backward(0.8)
+        else:
+            if closest_object[1].startX >= 101 & closest_object[1].startX <= 150:
+                non_detection_count = 0
+                wheels.right(0.8)
+            elif closest_object[1].startX >= 150 & closest_object[1].startX <= 200:
+                non_detection_count = 0
+                wheels.left(0.8)
     elif closest_object[1].startX >= 100 & closest_object[1].startX <= 200 & co_difference < 120:
         non_detection_count = 0
         wheels.forward(0.8)
     elif closest_object[1].startX > 200 & co_difference > 120:
-        non_detection_count = 0
-        wheels.left(0.8)
+        if distance >= 100:
+            non_detection_count = 0
+            wheels.left(0.8)
+        else:
+            non_detection_count = 0
+            wheels.forward(0.8)
     elif closest_object[1].startX < 200 & co_difference < 120:
         non_detection_count = 0
         wheels.forward(0.8)
@@ -104,16 +138,20 @@ def decide_and_perform_next_movement(detections, stationary, non_detection_count
 
 
 def main():
+    # preparing variables and performing time buffer
     status = 1
     stationary = True
     non_detection_count = 0
     vs = VideoStream(usePiCamera=True).start()
     CLASSES, COLORS, net, args = image_detection_setup()
+    gpiozero.setup(us_sensor[1], gpiozero.OUT)
+    gpiozero.setup(us_sensor[0], gpiozero.IN)
     time.sleep(5.0)
+    # scanning-movement cycle
     while status == 1:
         detections = scan_image_for_objects(vs, net, CLASSES, COLORS, args, status)
         decide_and_perform_next_movement(detections, stationary, non_detection_count, status)
+    #cleanup
     cv2.destroyAllWindows()
     vs.stop()
     return
-
