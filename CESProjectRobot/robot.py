@@ -45,6 +45,7 @@ def scan_image_for_objects(vs, net, CLASSES, COLORS, args, status):
         net.setInput(blob)
         detections = net.forward()
         coords = []
+        object_type = []
         # loop over the detections
         for i in np.arange(0, detections.shape[2]):
             confidence = detections[0, 0, i, 2]
@@ -56,6 +57,7 @@ def scan_image_for_objects(vs, net, CLASSES, COLORS, args, status):
                 (startX, startY, endX, endY) = box.astype("int")
                 label = "{}: {:.2f}%".format(CLASSES[idx],
                                              confidence * 100)
+                object_type[i] = label[0]
                 coords[i] = cv2.rectangle(frame, (startX, startY), (endX, endY),
                                           COLORS[idx], 2)
                 y = startY - 15 if startY - 15 > 15 else startY + 15
@@ -63,7 +65,7 @@ def scan_image_for_objects(vs, net, CLASSES, COLORS, args, status):
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLORS[idx], 2)
         sorted_detections = []
         for i in (0, len(detections)):
-            sorted_detections[i] = [detections[i], coords[i]]
+            sorted_detections[i] = [detections[i], coords[i], object_type[i]]
         return sorted_detections, status
 
 
@@ -101,17 +103,27 @@ def decide_and_perform_next_movement(detections, stationary, non_detection_count
         wheels.forward(0.8)
         stationary = False
     elif closest_object[1].startX < 100 & co_difference > 120:
-        if distance >= 100:
+        if closest_object[2] == 'cat':
+            non_detection_count = 0
+            wheels.right(0.9)
+        elif distance >= 100:
             non_detection_count = 0
             wheels.right(0.8)
         else:
             non_detection_count = 0
             wheels.forward(0.8)
     elif closest_object[1].startX < 100 & co_difference < 120:
-        non_detection_count = 0
-        wheels.forward(0.8)
+        if closest_object[2] == 'cat':
+            non_detection_count = 0
+            wheels.right(0.9)
+        else:
+            non_detection_count = 0
+            wheels.forward(0.8)
     elif closest_object[1].startX >= 100 & closest_object[1].startX <= 200 & co_difference > 120:
-        if distance >= 100:
+        if closest_object[2] == 'cat':
+            non_detection_count = 0
+            wheels.backward(0.9)
+        elif distance >= 100:
             non_detection_count = 0
             wheels.backward(0.8)
         else:
@@ -122,18 +134,29 @@ def decide_and_perform_next_movement(detections, stationary, non_detection_count
                 non_detection_count = 0
                 wheels.left(0.8)
     elif closest_object[1].startX >= 100 & closest_object[1].startX <= 200 & co_difference < 120:
-        non_detection_count = 0
-        wheels.forward(0.8)
+        if closest_object[2] == 'cat':
+            non_detection_count = 0
+            wheels.backward(0.9)
+        else:
+            non_detection_count = 0
+            wheels.forward(0.8)
     elif closest_object[1].startX > 200 & co_difference > 120:
-        if distance >= 100:
+        if closest_object[2] == 'cat':
+            non_detection_count = 0
+            wheels.left(0.9)
+        elif distance >= 100:
             non_detection_count = 0
             wheels.left(0.8)
         else:
             non_detection_count = 0
             wheels.forward(0.8)
     elif closest_object[1].startX < 200 & co_difference < 120:
-        non_detection_count = 0
-        wheels.forward(0.8)
+        if closest_object[2] == 'cat':
+            non_detection_count = 0
+            wheels.left(0.9)
+        else:
+            non_detection_count = 0
+            wheels.forward(0.8)
     return stationary, non_detection_count, status
 
 
